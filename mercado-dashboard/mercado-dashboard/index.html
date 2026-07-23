@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Descripción diaria del mercado · Club de Inversionistas</title>
+<style>
+  :root{
+    --navy:#1f3a93;
+    --navy-dark:#16285f;
+    --black:#111;
+    --red:#c0392b;
+    --ink:#1a1a1a;
+    --desc:#c0561f;            /* naranja de la columna DESCRIPCIÓN */
+    --border:#9aa0a6;
+    --grid:#cfd3d7;
+    --bg:#ffffff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;
+    font-size:13px;
+  }
+  .wrap{max-width:1240px; margin:0 auto; padding:14px}
+  .top{
+    display:flex; justify-content:space-between; align-items:flex-start; gap:16px;
+    margin-bottom:8px;
+  }
+  .title-block{flex:1}
+  .title-main{
+    background:var(--navy); color:#fff; text-align:center; font-weight:700;
+    padding:6px 8px; letter-spacing:.3px;
+  }
+  .title-date{
+    background:#2e5bd6; color:#fff; text-align:center; font-weight:600;
+    padding:3px 8px; font-size:12px;
+  }
+  .logo{
+    text-align:right; line-height:1; font-weight:800; letter-spacing:1px;
+    color:#111;
+  }
+  .logo b{font-size:26px}
+  .logo span{display:block; font-size:9px; color:#c0392b; letter-spacing:2px; font-weight:700}
+
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start}
+
+  table{border-collapse:collapse; width:100%; table-layout:fixed}
+  th,td{border:1px solid var(--grid); padding:2px 6px; white-space:nowrap; overflow:hidden}
+  thead th{font-size:11px; letter-spacing:.4px}
+
+  /* ---- Panel izquierdo: FUERZA RELATIVA ---- */
+  .band{
+    background:var(--navy-dark); color:#fff; text-align:center; font-weight:700;
+    border:1px solid var(--navy-dark); padding:4px;
+  }
+  .fr th{background:#e9ecef; color:#222; text-transform:uppercase}
+  .fr td.ticker{font-weight:700; color:#111}
+  .fr td.desc{color:var(--desc); font-weight:600; text-overflow:ellipsis}
+  .fr td.spark{padding:1px 4px}
+  .fr td.rs{text-align:center; font-weight:600; color:#1a1a1a}
+  tr.sep td{border:0; height:7px; padding:0}
+
+  /* ---- Panel derecho: POSICIÓN EN EL MERCADO ---- */
+  .pos-head-pos{background:var(--black); color:#fff}
+  .pos-head-var{background:var(--red); color:#fff}
+  .pos th{font-weight:700; text-transform:uppercase}
+  .pos td.ticker{font-weight:700; text-align:left}
+  .pos td.rs,.pos td.var{text-align:center; font-weight:600}
+  .col-tick{width:22%}
+  .col-rs{width:26%}
+  .col-var{width:26%}
+
+  .spark svg{display:block}
+  .muted{color:#888; text-align:center; font-size:11px; padding:6px}
+
+  @media (max-width:820px){ .grid2{grid-template-columns:1fr} .top{flex-direction:column} .logo{text-align:left} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="title-block">
+      <div class="title-main">Descripción diaria del mercado</div>
+      <div class="title-date" id="fecha">—</div>
+    </div>
+    <div class="logo"><b>CLUB</b><span>DE INVERSIONISTAS</span></div>
+  </div>
+
+  <div class="grid2">
+
+    <!-- ============ FUERZA RELATIVA ============ -->
+    <div>
+      <div class="band">FUERZA RELATIVA</div>
+      <table class="fr">
+        <thead>
+          <tr>
+            <th style="width:18%">Ticker</th>
+            <th style="width:42%">Descripción</th>
+            <th style="width:22%">Gráfico</th>
+            <th style="width:18%">RS_STS%</th>
+          </tr>
+        </thead>
+        <tbody id="fr-body"></tbody>
+      </table>
+    </div>
+
+    <!-- ============ POSICIÓN EN EL MERCADO ============ -->
+    <div>
+      <table class="pos">
+        <thead>
+          <tr>
+            <th class="pos-head-pos col-tick" rowspan="2">Ticker</th>
+            <th class="pos-head-pos col-rs" rowspan="2">RS_STS%</th>
+            <th class="pos-head-var" colspan="2">Variación</th>
+          </tr>
+          <tr>
+            <th class="pos-head-var">1W</th>
+            <th class="pos-head-var">1M</th>
+          </tr>
+        </thead>
+        <tbody id="pos-body"></tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* =========================================================================
+   1) FUENTE DE DATOS
+   Por ahora usamos DATOS DE MUESTRA (abajo) para que confirmes el aspecto.
+   Para conectar Google Sheets en vivo, reemplaza loadData() por un fetch()
+   a tu Netlify Function (ver netlify/functions/sheets.js y README).
+   ========================================================================= */
+
+async function loadData(){
+  // Intenta datos en vivo desde la Netlify Function; si no hay backend
+  // (p.ej. abriendo el HTML directo), usa los datos de muestra.
+  try{
+    const res = await fetch('/.netlify/functions/sheets');
+    if(res.ok){
+      const data = await res.json();
+      if(data && Array.isArray(data.fuerzaRelativa) && data.fuerzaRelativa.length){
+        return data;
+      }
+    }
+  }catch(e){ /* sin backend: caemos a la muestra */ }
+  return SAMPLE;
+}
+
+/* =========================================================================
+   2) ESCALAS DE COLOR
+   ========================================================================= */
+
+// RS 0..100  ->  rojo (0) -> amarillo (~50) -> verde (100)
+function colorRS(v){
+  v = Math.max(0, Math.min(100, Number(v)));
+  const hue = v * 1.2;                 // 0=rojo, 60=amarillo, 120=verde
+  const light = 88 - (Math.abs(v-50)/50)*16;  // un poco más vivo en extremos
+  return `hsl(${hue} 60% ${light}%)`;
+}
+
+// Variación en pps: 0 = blanco, + = verde, - = rojo (intensidad por magnitud)
+function colorPps(v){
+  v = Number(v);
+  if (v === 0) return '#ffffff';
+  const mag = Math.min(Math.abs(v), 60) / 60;     // satura a ±60
+  const light = 96 - mag*26;                       // 96% -> 70%
+  const hue = v > 0 ? 130 : 0;
+  return `hsl(${hue} 55% ${light}%)`;
+}
+
+// Sparkline de barras verdes a partir de una serie numérica
+function sparkline(serie){
+  if(!serie || !serie.length) return '';
+  const w = 150, h = 22, n = serie.length, gap = 1;
+  const bw = (w - gap*(n-1)) / n;
+  const max = Math.max(...serie), min = Math.min(...serie);
+  const rng = (max - min) || 1;
+  let bars = '';
+  serie.forEach((val,i)=>{
+    const bh = 3 + ((val - min)/rng) * (h-3);
+    const x = i*(bw+gap);
+    const y = h - bh;
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="#2e9e4f" rx="0.5"/>`;
+  });
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">${bars}</svg>`;
+}
+
+/* =========================================================================
+   3) RENDER
+   ========================================================================= */
+
+function pps(v){ const n=Number(v); return (n>0?'+':'') + n + ' pps'; }
+
+function renderFR(rows){
+  const body = document.getElementById('fr-body');
+  body.innerHTML = '';
+  let lastGroup = null;
+  rows.forEach(r=>{
+    const groupChanged = (lastGroup !== null && r.grupo !== undefined && r.grupo !== lastGroup);
+    if(r.sep === true || groupChanged){
+      const sep = document.createElement('tr');
+      sep.className = 'sep';
+      sep.innerHTML = '<td colspan="4"></td>';
+      body.appendChild(sep);
+    }
+    lastGroup = r.grupo;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="ticker">${r.ticker}</td>
+      <td class="desc" title="${r.desc}">${r.desc}</td>
+      <td class="spark">${sparkline(r.serie)}</td>
+      <td class="rs" style="background:${colorRS(r.rs)}">${r.rs}%</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function renderPos(rows){
+  const body = document.getElementById('pos-body');
+  body.innerHTML = '';
+  rows.sort((a,b)=> b.rs - a.rs);
+  rows.forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="ticker">${r.ticker}</td>
+      <td class="rs" style="background:${colorRS(r.rs)}">${r.rs}%</td>
+      <td class="var" style="background:${colorPps(r.w1)}">${pps(r.w1)}</td>
+      <td class="var" style="background:${colorPps(r.m1)}">${pps(r.m1)}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+(async function init(){
+  const data = await loadData();
+  document.getElementById('fecha').textContent = data.fecha || '';
+  renderFR(data.fuerzaRelativa);
+  renderPos(data.posicion);
+})();
+
+/* =========================================================================
+   4) DATOS DE MUESTRA (extraídos de tu imagen)
+   series[] son inventadas solo para mostrar el sparkline.
+   ========================================================================= */
+function s(seed){ // genera una serie verde con tendencia leve, solo demo
+  const a=[]; let v=4+Math.random()*3;
+  for(let i=0;i<14;i++){ v += (Math.random()-0.35); v=Math.max(1,v); a.push(+v.toFixed(2)); }
+  return a;
+}
+const SAMPLE = {
+  fecha: "martes, 23 junio, 2026",
+  fuerzaRelativa: [
+    {grupo:"tec", ticker:"XLK", desc:"Tecnología", rs:71, serie:s()},
+    {grupo:"tec", ticker:"SMH", desc:"Semiconductores", rs:92, serie:s()},
+    {grupo:"tec", ticker:"XTL", desc:"Equipos de telecom", rs:4, serie:s()},
+    {grupo:"tec", ticker:"IGV", desc:"Software de tecnología", rs:0, serie:s()},
+    {grupo:"tec", ticker:"FDN", desc:"Empresas de internet", rs:0, serie:s()},
+    {grupo:"tec", ticker:"HACK", desc:"Ciberseguridad", rs:67, serie:s()},
+    {grupo:"tec", ticker:"ROBO", desc:"Robótica y automatización", rs:25, serie:s()},
+    {grupo:"tec", ticker:"QTUM", desc:"Computación cuántica", rs:96, serie:s()},
+    {grupo:"tec", ticker:"BLOK", desc:"Tecnología blockchain", rs:83, serie:s()},
+    {grupo:"tec", ticker:"NASA", desc:"Espacio", rs:0, serie:s()},
+    {grupo:"tec", ticker:"DRAM", desc:"Memorias RAM", rs:92, serie:s()},
+    {grupo:"tec", ticker:"AIQ", desc:"Inteligencia Artificial", rs:46, serie:s()},
+    {grupo:"tec", ticker:"KWEB", desc:"Internet en China", rs:0, serie:s()},
+
+    {grupo:"fin", ticker:"XLF", desc:"Servicios financieros", rs:100, serie:s()},
+    {grupo:"fin", ticker:"IPAY", desc:"Servicios de pagos", rs:42, serie:s()},
+    {grupo:"fin", ticker:"KRE", desc:"Bancos regionales", rs:100, serie:s()},
+    {grupo:"fin", ticker:"KBE", desc:"Bancos", rs:100, serie:s()},
+    {grupo:"fin", ticker:"KCE", desc:"Capital Markets", rs:88, serie:s()},
+    {grupo:"fin", ticker:"IAI", desc:"Brokers", rs:96, serie:s()},
+    {grupo:"fin", ticker:"KIE", desc:"Seguros", rs:100, serie:s()},
+
+    {grupo:"con", ticker:"XLY", desc:"Consumo discrecional", rs:13, serie:s()},
+    {grupo:"con", ticker:"PEJ", desc:"Ocio y entretenimiento", rs:100, serie:s()},
+    {grupo:"con", ticker:"XRT", desc:"Comercio minorista", rs:88, serie:s()},
+    {grupo:"con", ticker:"PBJ", desc:"Comida & Bebida", rs:38, serie:s()},
+
+    {grupo:"com", ticker:"XLC", desc:"Servicios de comunicación", rs:0, serie:s()},
+    {grupo:"com", ticker:"IYZ", desc:"Telecomunicaciones", rs:17, serie:s()},
+    {grupo:"com", ticker:"IXP", desc:"Global servicios de comunicaciones", rs:0, serie:s()},
+
+    {grupo:"sal", ticker:"XLV", desc:"Sector Salud", rs:83, serie:s()},
+    {grupo:"sal", ticker:"IHI", desc:"Dispositivos médicos", rs:50, serie:s()},
+    {grupo:"sal", ticker:"IBB", desc:"Biotecnología", rs:100, serie:s()},
+    {grupo:"sal", ticker:"XBI", desc:"Biotecnología", rs:100, serie:s()},
+
+    {grupo:"ind", ticker:"XLI", desc:"Sector industrial", rs:100, serie:s()},
+    {grupo:"ind", ticker:"JETS", desc:"Aerolíneas", rs:100, serie:s()},
+    {grupo:"ind", ticker:"ITA", desc:"Aeroespacial y defensa", rs:96, serie:s()},
+    {grupo:"ind", ticker:"IYT", desc:"Transporte", rs:67, serie:s()},
+    {grupo:"ind", ticker:"IDRV", desc:"Vehículos autónomos y tecnología", rs:0, serie:s()}
+  ],
+  posicion: [
+    {ticker:"JETS", rs:100, w1:0,   m1:0},
+    {ticker:"XLI",  rs:100, w1:17,  m1:51},
+    {ticker:"XBI",  rs:100, w1:13,  m1:51},
+    {ticker:"IBB",  rs:100, w1:42,  m1:67},
+    {ticker:"XLF",  rs:100, w1:17,  m1:47},
+    {ticker:"KBE",  rs:100, w1:17,  m1:51},
+    {ticker:"KRE",  rs:100, w1:17,  m1:49},
+    {ticker:"PEJ",  rs:100, w1:17,  m1:26},
+    {ticker:"XLU",  rs:100, w1:71,  m1:84},
+    {ticker:"KIE",  rs:100, w1:29,  m1:54},
+    {ticker:"QTUM", rs:96,  w1:-4,  m1:-4},
+    {ticker:"IAI",  rs:96,  w1:0,   m1:24},
+    {ticker:"ITB",  rs:96,  w1:13,  m1:40},
+    {ticker:"ITA",  rs:96,  w1:4,   m1:14},
+    {ticker:"DRAM", rs:92,  w1:-8,  m1:-8},
+    {ticker:"SMH",  rs:92,  w1:-8,  m1:-8},
+    {ticker:"IWD",  rs:90,  w1:7,   m1:2},
+    {ticker:"KCE",  rs:88,  w1:0,   m1:39},
+    {ticker:"XRT",  rs:88,  w1:0,   m1:34},
+    {ticker:"IYR",  rs:88,  w1:54,  m1:69},
+    {ticker:"BLOK", rs:83,  w1:4,   m1:-3},
+    {ticker:"XLV",  rs:83,  w1:8,   m1:18},
+    {ticker:"XLB",  rs:75,  w1:-8,  m1:29},
+    {ticker:"XLK",  rs:71,  w1:-13, m1:-20},
+    {ticker:"XLP",  rs:71,  w1:25,  m1:45},
+    {ticker:"IYT",  rs:67,  w1:-8,  m1:-10},
+    {ticker:"HACK", rs:67,  w1:13,  m1:-8},
+    {ticker:"IHI",  rs:50,  w1:8,   m1:27},
+    {ticker:"AIQ",  rs:46,  w1:-33, m1:-43},
+    {ticker:"IPAY", rs:42,  w1:13,  m1:25},
+    {ticker:"PBJ",  rs:38,  w1:17,  m1:26},
+    {ticker:"VEGI", rs:29,  w1:29,  m1:29},
+    {ticker:"ROBO", rs:25,  w1:4,   m1:-12},
+    {ticker:"URA",  rs:25,  w1:0,   m1:11},
+    {ticker:"REMX", rs:17,  w1:-17, m1:-2},
+    {ticker:"MOO",  rs:17,  w1:17,  m1:17},
+    {ticker:"XOP",  rs:17,  w1:17,  m1:17},
+    {ticker:"XLE",  rs:17,  w1:17,  m1:17},
+    {ticker:"IYZ",  rs:17,  w1:0,   m1:3},
+    {ticker:"PBW",  rs:13,  w1:-13, m1:-39},
+    {ticker:"GDX",  rs:13,  w1:-17, m1:-4},
+    {ticker:"XLY",  rs:13,  w1:-21, m1:-6}
+  ]
+};
+</script>
+</body>
+</html>
