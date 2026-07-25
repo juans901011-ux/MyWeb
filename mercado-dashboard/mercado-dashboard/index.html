@@ -74,6 +74,34 @@
   .spark svg{display:block}
   .muted{color:#888; text-align:center; font-size:11px; padding:6px}
 
+  /* ---- Pestañas ---- */
+  .tabs{display:flex; gap:4px; margin-bottom:10px; border-bottom:2px solid var(--navy-dark)}
+  .tab-btn{
+    border:0; background:#e9ecef; color:#444; font-weight:700; font-size:12px;
+    padding:7px 16px; cursor:pointer; border-radius:4px 4px 0 0; letter-spacing:.3px;
+  }
+  .tab-btn.active{background:var(--navy-dark); color:#fff}
+  .tab-panel{display:none}
+  .tab-panel.active{display:block}
+
+  /* ---- Resumen (tabla ordenable) ---- */
+  table.resumen{table-layout:fixed}
+  .resumen th:nth-child(1), .resumen td:nth-child(1){width:3%}
+  .resumen th:nth-child(2), .resumen td:nth-child(2){width:7%}
+  .resumen th:nth-child(3), .resumen td:nth-child(3){width:19%}
+  .resumen th:nth-child(n+4), .resumen td:nth-child(n+4){width:8.9%}
+  .resumen th{
+    background:#e9ecef; color:#222; text-transform:uppercase; text-align:center;
+    cursor:pointer; user-select:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .resumen th:hover{background:#dbe0e4}
+  .resumen th .arrow{font-size:9px; color:var(--navy); margin-left:2px}
+  .resumen td{text-align:center; font-weight:600}
+  .resumen td.num{text-align:center}
+  .resumen td.ticker{font-weight:700; text-align:left}
+  .resumen td.nombre{font-weight:600; color:var(--desc); text-align:left; text-overflow:ellipsis}
+  .resumen td.idx{color:#888; font-weight:400; text-align:center}
+
   @media (max-width:820px){ .grid2{grid-template-columns:1fr} .top{flex-direction:column} .logo{text-align:left} }
 </style>
 </head>
@@ -88,6 +116,12 @@
     <div class="logo"><b>CLUB</b><span>DE INVERSIONISTAS</span></div>
   </div>
 
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="sectores">% RS por sectores</button>
+    <button class="tab-btn" data-tab="resumen">Resumen</button>
+  </div>
+
+  <div class="tab-panel active" id="tab-sectores">
   <div class="grid2">
 
     <!-- ============ FUERZA RELATIVA ============ -->
@@ -124,6 +158,17 @@
       </table>
     </div>
 
+  </div>
+  </div>
+
+  <!-- ============ RESUMEN (ordenable) ============ -->
+  <div class="tab-panel" id="tab-resumen">
+    <table class="resumen" id="resumen-table">
+      <thead>
+        <tr id="resumen-head"></tr>
+      </thead>
+      <tbody id="resumen-body"></tbody>
+    </table>
   </div>
 </div>
 
@@ -168,6 +213,18 @@ function colorPps(v){
   if (v === 0) return '#ffffff';
   const mag = Math.min(Math.abs(v), 60) / 60;     // satura a ±60
   const light = 96 - mag*26;                       // 96% -> 70%
+  const hue = v > 0 ? 130 : 0;
+  return `hsl(${hue} 55% ${light}%)`;
+}
+
+// Variación en % con saturación relativa a la columna (como el formato
+// condicional de Excel por columna): cap = mayor magnitud absoluta de esa columna.
+function colorPctRel(v, cap){
+  v = Number(v);
+  if (!isFinite(v) || v === 0) return '#ffffff';
+  cap = cap || 1;
+  const mag = Math.min(Math.abs(v), cap) / cap;
+  const light = 96 - mag*26;
   const hue = v > 0 ? 130 : 0;
   return `hsl(${hue} 55% ${light}%)`;
 }
@@ -233,11 +290,102 @@ function renderPos(rows){
   });
 }
 
+// ---- Resumen: tabla ordenable por columna (como el filtro A-Z / Z-A de Excel) ----
+const RESUMEN_COLS = [
+  {key:'ticker',  label:'Ticker',     type:'text'},
+  {key:'nombre',  label:'Nombre',     type:'text'},
+  {key:'rs',      label:'RS_STS%',    type:'rs'},
+  {key:'fromOpen',label:'From Open',  type:'pct'},
+  {key:'dia',     label:'Día',        type:'pct'},
+  {key:'semana',  label:'Semana',     type:'pct'},
+  {key:'mes',     label:'Mes',        type:'pct'},
+  {key:'ytd',     label:'YTD',        type:'pct'},
+  {key:'yoy',     label:'YoY',        type:'pct'},
+  {key:'w52h',    label:'52W High',   type:'pct'}
+];
+
+let resumenRows = [];
+let resumenSort = {key:'rs', dir:-1};
+
+function fmtPct(v){ return v==null ? '' : (v>0?'+':'') + v.toFixed(2) + '%'; }
+
+function renderResumenHead(){
+  const tr = document.getElementById('resumen-head');
+  tr.innerHTML = '<th style="width:34px">#</th>' + RESUMEN_COLS.map(c=>{
+    const active = resumenSort.key === c.key;
+    const arrow = active ? (resumenSort.dir === 1 ? '▲' : '▼') : '';
+    return `<th data-key="${c.key}">${c.label}${arrow ? ` <span class="arrow">${arrow}</span>` : ''}</th>`;
+  }).join('');
+  tr.querySelectorAll('th[data-key]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      resumenSort.dir = (resumenSort.key === key) ? -resumenSort.dir : 1;
+      resumenSort.key = key;
+      renderResumen(resumenRows);
+    });
+  });
+}
+
+function renderResumen(rows){
+  resumenRows = rows;
+  renderResumenHead();
+
+  const col = RESUMEN_COLS.find(c=>c.key===resumenSort.key);
+  const sorted = [...rows].sort((a,b)=>{
+    let av = a[resumenSort.key], bv = b[resumenSort.key];
+    let cmp;
+    if(col.type === 'text'){
+      cmp = String(av||'').localeCompare(String(bv||''), 'es');
+    } else {
+      av = av==null ? -Infinity : av; bv = bv==null ? -Infinity : bv;
+      cmp = av - bv;
+    }
+    return cmp * resumenSort.dir;
+  });
+
+  // saturación de color relativa al máximo absoluto de cada columna % (estilo Excel)
+  const caps = {};
+  RESUMEN_COLS.filter(c=>c.type==='pct').forEach(c=>{
+    caps[c.key] = Math.max(1, ...rows.map(r=> Math.abs(r[c.key]||0)));
+  });
+
+  const body = document.getElementById('resumen-body');
+  body.innerHTML = '';
+  sorted.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    let cells = `<td class="idx">${i+1}</td>`;
+    cells += `<td class="ticker">${r.ticker}</td>`;
+    cells += `<td class="nombre" title="${r.nombre}">${r.nombre}</td>`;
+    cells += `<td class="num" style="background:${r.rs!=null?colorRS(r.rs):'#fff'}">${r.rs!=null?r.rs+'%':''}</td>`;
+    ['fromOpen','dia','semana','mes','ytd','yoy','w52h'].forEach(key=>{
+      const v = r[key];
+      cells += `<td class="num" style="background:${colorPctRel(v, caps[key])}">${fmtPct(v)}</td>`;
+    });
+    tr.innerHTML = cells;
+    body.appendChild(tr);
+  });
+}
+
+// ---- Pestañas ----
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
 (async function init(){
   const data = await loadData();
   document.getElementById('fecha').textContent = data.fecha || '';
   renderFR(data.fuerzaRelativa);
   renderPos(data.posicion);
+  if(Array.isArray(data.resumen) && data.resumen.length){
+    renderResumen(data.resumen);
+  } else {
+    document.getElementById('tab-resumen').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';
+  }
 })();
 
 /* =========================================================================

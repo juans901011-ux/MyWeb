@@ -67,15 +67,47 @@ function buildSparklines(bd, lastN = 26) {
   return series;
 }
 
+// ---- construir filas de la pestaña Resumen ----
+function parseResumen(sheet) {
+  if (!sheet || !sheet.length) return [];
+
+  // Encabezado ubicado por contenido ("Ticker"), no por fila fija, por la misma
+  // razón que arriba: insertar filas se corre la posición.
+  const headerIdx = sheet.findIndex(row => row && row.some(c => String(c || '').trim() === 'Ticker'));
+  if (headerIdx === -1) return [];
+  const header = sheet[headerIdx];
+  const col = {};
+  header.forEach((cell, i) => {
+    const t = String(cell || '').trim();
+    if (t) col[t] = i;
+  });
+
+  const numCols = { rs: 'RS_STS%', fromOpen: 'From Open', dia: 'Día', semana: 'Semana', mes: 'Mes', ytd: 'YTD', yoy: 'YoY', w52h: '52W High' };
+
+  const rows = [];
+  for (let i = headerIdx + 1; i < sheet.length; i++) {
+    const row = sheet[i];
+    const ticker = row && col['Ticker'] != null ? (row[col['Ticker']] || '').trim() : '';
+    if (!ticker) continue;
+    const item = { ticker, nombre: (col['Nombre'] != null ? row[col['Nombre']] : '') || '' };
+    for (const [key, label] of Object.entries(numCols)) {
+      item[key] = col[label] != null ? toNum(row[col[label]]) : null;
+    }
+    rows.push(item);
+  }
+  return rows;
+}
+
 exports.handler = async () => {
   if (!SHEET_ID || !API_KEY) {
     return { statusCode: 500, body: JSON.stringify({ error: 'Falta SHEET_ID o SHEETS_API_KEY en variables de entorno.' }) };
   }
   try {
-    const [rs, bd, dateRows] = await getRanges([
+    const [rs, bd, dateRows, resumenRaw] = await getRanges([
       "'%RS'!A1:R260",   // ambos paneles
       "BD!A1:DZ60",      // cierres históricos para sparklines
-      "'%RS'!D1:D6"      // fecha (celda exacta puede variar si se insertan filas arriba)
+      "'%RS'!D1:D6",     // fecha (celda exacta puede variar si se insertan filas arriba)
+      "Resumen!A1:S150"  // tabla resumen ordenable
     ]);
 
     // La celda de fecha se identifica por contener un año (4 dígitos), no por
@@ -116,10 +148,12 @@ exports.handler = async () => {
       });
     }
 
+    const resumen = parseResumen(resumenRaw);
+
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
-      body: JSON.stringify({ fecha, fuerzaRelativa, posicion })
+      body: JSON.stringify({ fecha, fuerzaRelativa, posicion, resumen })
     };
   } catch (err) {
     return { statusCode: 502, body: JSON.stringify({ error: String(err.message || err) }) };
