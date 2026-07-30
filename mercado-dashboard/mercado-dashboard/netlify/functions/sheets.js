@@ -105,7 +105,8 @@ exports.handler = async () => {
   try {
     const [rs, bd, dateRows, resumenRaw] = await getRanges([
       "'%RS'!A1:R260",   // ambos paneles
-      "BD!A1:DZ60",      // cierres históricos para sparklines
+      "BD!1:60",         // cierres históricos para sparklines (filas completas: no depende
+                         // de un límite de columna fijo, así crece solo al agregar ETFs)
       "'%RS'!D1:D6",     // fecha (celda exacta puede variar si se insertan filas arriba)
       "Resumen!A1:S150"  // tabla resumen ordenable
     ]);
