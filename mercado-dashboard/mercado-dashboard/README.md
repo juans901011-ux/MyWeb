@@ -47,4 +47,4 @@ Carga `SHEET_ID` y `SHEETS_API_KEY` en **Site settings → Environment variables
 ## Notas
 - Si los nombres de las pestañas no son exactamente `%RS` y `BD`, ajústalos en `netlify/functions/sheets.js`.
 - El color de las celdas (heatmap) y los sparklines se generan en el cliente; no se usa Chart.js.
-- Cache de 5 min en la función para no golpear la API en cada visita.
+- Cache de 15 min en la función (misma cadencia con la que actualiza Google Finance) para no golpear la API en cada visita.

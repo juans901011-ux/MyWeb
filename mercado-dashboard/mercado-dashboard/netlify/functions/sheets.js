@@ -153,7 +153,7 @@ exports.handler = async () => {
 
     return {
       statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=900' },
       body: JSON.stringify({ fecha, fuerzaRelativa, posicion, resumen })
     };
   } catch (err) {
