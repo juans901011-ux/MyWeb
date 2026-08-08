@@ -413,7 +413,7 @@ function renderBubbleMap(rows){
   svg.innerHTML = '';
   if(!data.length) return;
 
-  const W = 1000, H = 540, mL = 46, mR = 16, mT = 16, mB = 44;
+  const W = 1000, H = 540, mL = 46, mR = 16, mT = 70, mB = 44;
   const innerW = W - mL - mR, innerH = H - mT - mB;
 
   const maxAbsDia = Math.max(1, ...data.map(r=>Math.abs(r.dia)));
@@ -468,9 +468,6 @@ function renderBubbleMap(rows){
     const cx = xs(r.dia), cy = ys(r.rs);
     const dot = el('circle', {cx, cy, r:7, fill: colorRS(r.rs), class:'bb-dot'});
     svg.appendChild(dot);
-    if(r.rs >= 90){
-      svg.appendChild(text(cx, cy-10, 'bb-dot-label', 'middle', r.ticker));
-    }
     const show = ()=>{
       const dr = dot.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
       tip.innerHTML = `<b>${r.ticker}</b> — ${r.nombre}<br>RS_STS%: <b>${r.rs}%</b> &nbsp; Día: <b>${fmtPct(r.dia)}</b>`;
@@ -480,6 +477,25 @@ function renderBubbleMap(rows){
     };
     dot.addEventListener('mouseenter', show);
     dot.addEventListener('mouseleave', ()=> tip.style.display='none');
+  });
+
+  // etiquetas de RS >= 90%, con anti-colisión: si el hueco horizontal ya está
+  // ocupado por otra etiqueta, la apila más arriba en vez de superponer el texto.
+  const lineH = 12;
+  const placed = [];
+  data.filter(r=>r.rs>=90).sort((a,b)=> xs(a.dia)-xs(b.dia)).forEach(r=>{
+    const cx = xs(r.dia), cy = ys(r.rs);
+    const w = r.ticker.length*5.6 + 6;
+    let y = cy - 11;
+    for(let tries=0; tries<12; tries++){
+      const x1 = cx - w/2, x2 = cx + w/2;
+      const collide = placed.some(p => x1 < p.x2 && x2 > p.x1 && Math.abs(y - p.y) < lineH);
+      if(!collide) break;
+      y -= lineH;
+    }
+    placed.push({x1: cx - w/2, x2: cx + w/2, y});
+    svg.appendChild(el('rect', {x:cx-w/2, y:y-9, width:w, height:11, rx:2, fill:'#fff', opacity:'0.85'}));
+    svg.appendChild(text(cx, y, 'bb-dot-label', 'middle', r.ticker));
   });
 }
 
