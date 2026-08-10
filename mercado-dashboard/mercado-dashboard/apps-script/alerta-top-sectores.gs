@@ -34,6 +34,15 @@ function toNum_(s) {
   return isNaN(n) ? null : n;
 }
 
+// Normaliza encabezados quitando acentos y mayúsculas: evita que un copy/paste
+// cambie la codificación Unicode de una tilde (ej. "Día") y rompa la comparación
+// exacta de strings sin que se note.
+function normKey_(s) {
+  return String(s || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .trim().toLowerCase();
+}
+
 // Ubica el encabezado por contenido ("Ticker"), no por fila fija: si el Sheet
 // crece (nuevos ETFs) e inserta filas arriba, esto sigue funcionando igual
 // (mismo enfoque que netlify/functions/sheets.js).
@@ -42,25 +51,25 @@ function leerResumen_() {
   if (!sheet) throw new Error('No existe la hoja "' + HOJA + '"');
   const values = sheet.getDataRange().getValues();
 
-  const headerIdx = values.findIndex(row => row.some(c => String(c).trim() === 'Ticker'));
+  const headerIdx = values.findIndex(row => row.some(c => normKey_(c) === 'ticker'));
   if (headerIdx === -1) throw new Error('No se encontró el encabezado "Ticker" en la hoja ' + HOJA);
   const header = values[headerIdx];
   const col = {};
   header.forEach((cell, i) => {
-    const t = String(cell).trim();
+    const t = normKey_(cell);
     if (t) col[t] = i;
   });
 
   const rows = [];
   for (let i = headerIdx + 1; i < values.length; i++) {
     const row = values[i];
-    const ticker = col['Ticker'] != null ? String(row[col['Ticker']]).trim() : '';
+    const ticker = col['ticker'] != null ? String(row[col['ticker']]).trim() : '';
     if (!ticker) continue;
     rows.push({
       ticker,
-      nombre: col['Nombre'] != null ? String(row[col['Nombre']]).trim() : '',
-      rs: col['RS_STS%'] != null ? toNum_(row[col['RS_STS%']]) : null,
-      dia: col['Día'] != null ? toNum_(row[col['Día']]) : null
+      nombre: col['nombre'] != null ? String(row[col['nombre']]).trim() : '',
+      rs: col['rs_sts%'] != null ? toNum_(row[col['rs_sts%']]) : null,
+      dia: col['dia'] != null ? toNum_(row[col['dia']]) : null
     });
   }
   return rows;
