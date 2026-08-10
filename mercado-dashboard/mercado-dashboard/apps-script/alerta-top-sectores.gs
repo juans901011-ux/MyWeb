@@ -28,8 +28,15 @@ const HOJA = 'Resumen';
 const RS_MIN = 90;
 const TOP_N = 10;
 
+// Convierte a número, aceptando dos formas que Apps Script puede devolver para
+// la MISMA celda según cómo esté formateada en el Sheet:
+//  - texto mostrado, ej. "100%" o "1,17%" (columna de texto)
+//  - número crudo, ej. 1 o 0.0117 (columna numérica con formato de %) -- este es
+//    el caso real en este Sheet: getValues() da el valor sin formatear, no el
+//    texto que se ve en pantalla, así que hay que escalarlo x100 nosotros mismos.
 function toNum_(s) {
   if (s === null || s === undefined || s === '') return null;
+  if (typeof s === 'number') return s * 100;
   const n = parseFloat(String(s).replace('%', '').replace(',', '.').trim());
   return isNaN(n) ? null : n;
 }
