@@ -23,6 +23,7 @@
  */
 
 const EMAIL_TO = 'juans901011@gmail.com';
+const SHEET_ID = '11gXWPBsWHIVnYa3vl_UHwEIcprH9WCcTbAVuN5V_G6E';
 const HOJA = 'Resumen';
 const RS_MIN = 90;
 const TOP_N = 10;
@@ -37,7 +38,7 @@ function toNum_(s) {
 // crece (nuevos ETFs) e inserta filas arriba, esto sigue funcionando igual
 // (mismo enfoque que netlify/functions/sheets.js).
 function leerResumen_() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(HOJA);
+  const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(HOJA);
   if (!sheet) throw new Error('No existe la hoja "' + HOJA + '"');
   const values = sheet.getDataRange().getValues();
 
