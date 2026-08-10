@@ -15,8 +15,8 @@
  *      La primera vez pedirá autorizar acceso a Gmail y al Sheet -> Revisar permisos ->
  *      elige tu cuenta -> Avanzado -> Ir a [nombre del proyecto] (no seguro) -> Permitir.
  *      Esto es normal: es tu propio script, no de un tercero.
- *   6. Listo. Se enviará solo, todos los días ~10:00-10:15am hora de Nueva York
- *      (Apps Script no garantiza el minuto exacto, solo una ventana de ~15 min).
+ *   6. Listo. Se enviará solo, todos los días ~9:35-10:00am hora de Nueva York
+ *      (Apps Script no garantiza el minuto exacto, solo una ventana aproximada).
  *
  * Para probarlo ya, sin esperar al día siguiente: elige "enviarAlertaTopSectores"
  * en el desplegable de funciones y dale a Ejecutar.
@@ -142,10 +142,13 @@ function instalarTrigger() {
     .filter(t => t.getHandlerFunction() === 'enviarAlertaTopSectores')
     .forEach(t => ScriptApp.deleteTrigger(t));
 
+  // Apps Script no permite fijar un minuto exacto: atHour+nearMinute dispara
+  // dentro de una ventana aproximada de ~±15 min. Apuntar a las 9:45 cae dentro
+  // de la ventana pedida (9:35-10:00 hora NY).
   ScriptApp.newTrigger('enviarAlertaTopSectores')
     .timeBased()
-    .atHour(10)
-    .nearMinute(0)
+    .atHour(9)
+    .nearMinute(45)
     .everyDays(1)
     .create();
 }
