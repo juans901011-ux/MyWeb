@@ -8,7 +8,8 @@ detrás de una Netlify Function (nunca llega al navegador).
 ```
 mercado-dashboard/
 ├── index.html                  Frontend (tablas, heatmap, sparklines SVG)
-├── netlify/functions/sheets.js Proxy a Google Sheets API (lee %RS y BD)
+├── netlify/functions/sheets.js Proxy a Google Sheets API (lee %RS, BD y Resumen)
+├── apps-script/                Alerta diaria por correo (vive en el Sheet, no en Netlify)
 ├── netlify.toml
 ├── .env.example
 └── README.md
@@ -43,6 +44,12 @@ confirmes que se ve como el Excel.
 netlify deploy --prod
 ```
 Carga `SHEET_ID` y `SHEETS_API_KEY` en **Site settings → Environment variables** de Netlify.
+
+## Alerta diaria por correo (Top sectores)
+`apps-script/alerta-top-sectores.gs` es un Google Apps Script independiente (no corre en
+Netlify) que envía un correo diario ~10:00am hora de Nueva York con el Top 10 de ETFs con
+RS_STS% > 90%, ordenados por variación del Día. Se pega directo en el editor de Apps Script
+del propio Google Sheet — instrucciones de instalación en los comentarios del archivo.
 
 ## Notas
 - Si los nombres de las pestañas no son exactamente `%RS` y `BD`, ajústalos en `netlify/functions/sheets.js`.
