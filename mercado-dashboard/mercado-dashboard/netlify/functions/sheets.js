@@ -3,14 +3,12 @@
 // nunca llega al navegador.
 //
 // Variables de entorno requeridas (Netlify > Site settings > Environment, o .env con netlify dev):
-//   SHEET_ID              -> el ID del Google Sheet principal (lo que va entre /d/ y /edit en la URL)
-//   SHEET_ID_SEGUIMIENTO  -> ID del Sheet "Seguimiento 2026" (pestaña Dashboard: activos y sectores)
-//   SHEETS_API_KEY        -> API key de Google Cloud con "Google Sheets API" habilitada
+//   SHEET_ID         -> el ID del Google Sheet (lo que va entre /d/ y /edit en la URL)
+//   SHEETS_API_KEY   -> API key de Google Cloud con "Google Sheets API" habilitada
 //
-// Ambas hojas deben ser de lectura pública ("Cualquiera con el enlace: Lector").
+// La hoja debe ser de lectura pública ("Cualquiera con el enlace: Lector").
 
 const SHEET_ID = process.env.SHEET_ID;
-const SHEET_ID_SEGUIMIENTO = process.env.SHEET_ID_SEGUIMIENTO;
 const API_KEY = process.env.SHEETS_API_KEY;
 
 // ---- helpers de parseo ----
@@ -25,9 +23,9 @@ const ppsToNum = (s) => {
   return m ? parseFloat(m[0]) : 0;
 };
 
-async function getRanges(sheetId, ranges) {
+async function getRanges(ranges) {
   const params = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?${params}&key=${API_KEY}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?${params}&key=${API_KEY}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -100,55 +98,12 @@ function parseResumen(sheet) {
   return rows;
 }
 
-// ---- construir "Principales Activos" / "Sectores S&P500" desde el Sheet "Seguimiento 2026" ----
-const PRINCIPALES_TICKERS = {
-  activos: ['SPY', 'DIA', 'QQQ', 'IWM', 'GLD', 'TLT', 'UUP', 'GBTC', 'USO'],
-  sectores: ['XLE', 'XLV', 'XLRE', 'XLF', 'XLP', 'XLI', 'XLU', 'XLB', 'XLC', 'XLY', 'XLK']
-};
-
-function parsePrincipales(sheet) {
-  if (!sheet || !sheet.length) return [];
-
-  const headerIdx = sheet.findIndex(row => row && row.some(c => String(c || '').trim() === 'Ticker'));
-  if (headerIdx === -1) return [];
-  const header = sheet[headerIdx];
-  const col = {};
-  header.forEach((cell, i) => {
-    const t = String(cell || '').trim();
-    if (t) col[t] = i;
-  });
-
-  // Un mismo ticker (ej. GLD) puede repetirse más abajo en otro bloque del Sheet
-  // ("Otros Instrumentos Financieros"); nos quedamos con la primera aparición.
-  const byTicker = {};
-  for (let i = headerIdx + 1; i < sheet.length; i++) {
-    const row = sheet[i];
-    const ticker = row && col['Ticker'] != null ? (row[col['Ticker']] || '').trim() : '';
-    if (!ticker || byTicker[ticker]) continue;
-    byTicker[ticker] = {
-      ticker,
-      nombre: (col['Nombre'] != null ? row[col['Nombre']] : '') || '',
-      high52: col['High 52'] != null ? toNum(row[col['High 52']]) : null,
-      ytd: col['YTD'] != null ? toNum(row[col['YTD']]) : null,
-      mes: col['Mes'] != null ? toNum(row[col['Mes']]) : null,
-      semana: col['Semana'] != null ? toNum(row[col['Semana']]) : null,
-      dia: col['Día'] != null ? toNum(row[col['Día']]) : null
-    };
-  }
-
-  const result = [];
-  for (const [grupo, tickers] of Object.entries(PRINCIPALES_TICKERS)) {
-    tickers.forEach(t => { if (byTicker[t]) result.push({ grupo, ...byTicker[t] }); });
-  }
-  return result;
-}
-
 exports.handler = async () => {
   if (!SHEET_ID || !API_KEY) {
     return { statusCode: 500, body: JSON.stringify({ error: 'Falta SHEET_ID o SHEETS_API_KEY en variables de entorno.' }) };
   }
   try {
-    const [rs, bd, dateRows, resumenRaw] = await getRanges(SHEET_ID, [
+    const [rs, bd, dateRows, resumenRaw] = await getRanges([
       "'%RS'!A1:R260",   // ambos paneles
       "BD!1:60",         // cierres históricos para sparklines (filas completas: no depende
                          // de un límite de columna fijo, así crece solo al agregar ETFs)
@@ -196,20 +151,10 @@ exports.handler = async () => {
 
     const resumen = parseResumen(resumenRaw);
 
-    // Sheet "Seguimiento 2026": opcional -- si falla o no está configurado, el
-    // resto del dashboard sigue funcionando igual.
-    let principales = [];
-    if (SHEET_ID_SEGUIMIENTO) {
-      try {
-        const [dash] = await getRanges(SHEET_ID_SEGUIMIENTO, ["Dashboard!A1:L50"]);
-        principales = parsePrincipales(dash);
-      } catch (e) { /* no bloquea el resto del dashboard */ }
-    }
-
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=900' },
-      body: JSON.stringify({ fecha, fuerzaRelativa, posicion, resumen, principales })
+      body: JSON.stringify({ fecha, fuerzaRelativa, posicion, resumen })
     };
   } catch (err) {
     return { statusCode: 502, body: JSON.stringify({ error: String(err.message || err) }) };

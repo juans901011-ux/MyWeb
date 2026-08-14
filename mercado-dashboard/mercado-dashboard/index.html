@@ -123,13 +123,6 @@
   }
   .bubble-tip b{color:#fff}
 
-  /* ---- Principales Activos ---- */
-  table.principales{table-layout:fixed}
-  .principales th{background:#e9ecef; color:#222; text-transform:uppercase; text-align:center}
-  .principales td.ticker{font-weight:700; text-align:left}
-  .principales td.nombre{font-weight:600; color:var(--desc); text-align:left; text-overflow:ellipsis}
-  .principales td.num{text-align:center; font-weight:600}
-
   @media (max-width:820px){ .grid2{grid-template-columns:1fr} .top{flex-direction:column} .logo{text-align:left} }
 </style>
 </head>
@@ -148,7 +141,6 @@
     <button class="tab-btn active" data-tab="sectores">% RS por sectores</button>
     <button class="tab-btn" data-tab="resumen">Resumen</button>
     <button class="tab-btn" data-tab="mapa">Mapa RS × Día</button>
-    <button class="tab-btn" data-tab="principales">Principales Activos</button>
   </div>
 
   <div class="tab-panel active" id="tab-sectores">
@@ -208,24 +200,6 @@
       <svg id="bubble-svg"></svg>
       <div class="bubble-tip" id="bubble-tip"></div>
     </div>
-  </div>
-
-  <!-- ============ PRINCIPALES ACTIVOS (Sheet Seguimiento 2026) ============ -->
-  <div class="tab-panel" id="tab-principales">
-    <table class="principales">
-      <thead>
-        <tr>
-          <th style="width:16%">Ticker</th>
-          <th style="width:34%">Nombre</th>
-          <th style="width:12.5%">High 52</th>
-          <th style="width:12.5%">YTD</th>
-          <th style="width:12.5%">Mes</th>
-          <th style="width:12.5%">Semana</th>
-          <th style="width:12.5%">Día</th>
-        </tr>
-      </thead>
-      <tbody id="principales-body"></tbody>
-    </table>
   </div>
 </div>
 
@@ -525,33 +499,6 @@ function renderBubbleMap(rows){
   });
 }
 
-// ---- Principales Activos (Sheet Seguimiento 2026) ----
-function renderPrincipales(rows){
-  const body = document.getElementById('principales-body');
-  body.innerHTML = '';
-
-  const cols = ['high52','ytd','mes','semana','dia'];
-  const caps = {};
-  cols.forEach(c => { caps[c] = Math.max(1, ...rows.map(r => Math.abs(r[c] || 0))); });
-
-  let lastGrupo = null;
-  const bandas = { activos: 'PRINCIPALES ACTIVOS', sectores: 'SECTORES S&P 500' };
-  rows.forEach(r=>{
-    if(r.grupo !== lastGrupo){
-      const band = document.createElement('tr');
-      band.innerHTML = `<td colspan="7" style="background:var(--navy-dark);color:#fff;text-align:center;font-weight:700;padding:4px">${bandas[r.grupo] || r.grupo}</td>`;
-      body.appendChild(band);
-      lastGrupo = r.grupo;
-    }
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="ticker">${r.ticker}</td>
-      <td class="nombre" title="${r.nombre}">${r.nombre}</td>
-      ${cols.map(c => `<td class="num" style="background:${colorPctRel(r[c], caps[c])}">${fmtPct(r[c])}</td>`).join('')}`;
-    body.appendChild(tr);
-  });
-}
-
 // ---- Pestañas ----
 document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
@@ -573,11 +520,6 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
   } else {
     document.getElementById('tab-resumen').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';
     document.getElementById('tab-mapa').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';
-  }
-  if(Array.isArray(data.principales) && data.principales.length){
-    renderPrincipales(data.principales);
-  } else {
-    document.getElementById('tab-principales').innerHTML = '<div class="muted">Sin datos de Principales Activos.</div>';
   }
 })();
 
