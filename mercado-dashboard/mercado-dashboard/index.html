@@ -218,7 +218,10 @@ async function loadData(){
     const res = await fetch('/api/sheets');
     if(res.ok){
       const data = await res.json();
-      if(data && Array.isArray(data.fuerzaRelativa) && data.fuerzaRelativa.length){
+      // Confía en los datos en vivo si la respuesta tiene la forma esperada,
+      // aunque algún panel venga vacío (ej. si el Sheet tiene errores de fórmula
+      // ese día) -- así nunca se cae silenciosamente a la muestra vieja fija.
+      if(data && Array.isArray(data.fuerzaRelativa) && Array.isArray(data.posicion)){
         return data;
       }
     }
@@ -512,8 +515,16 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
 (async function init(){
   const data = await loadData();
   document.getElementById('fecha').textContent = data.fecha || '';
-  renderFR(data.fuerzaRelativa);
-  renderPos(data.posicion);
+  if(data.fuerzaRelativa && data.fuerzaRelativa.length){
+    renderFR(data.fuerzaRelativa);
+  } else {
+    document.getElementById('fr-body').innerHTML = '<tr><td colspan="4" class="muted">Sin datos de Fuerza Relativa (revisa si el Sheet tiene errores de fórmula, ej. #DIV/0!).</td></tr>';
+  }
+  if(data.posicion && data.posicion.length){
+    renderPos(data.posicion);
+  } else {
+    document.getElementById('pos-body').innerHTML = '<tr><td colspan="4" class="muted">Sin datos de Posición.</td></tr>';
+  }
   if(Array.isArray(data.resumen) && data.resumen.length){
     renderResumen(data.resumen);
     renderBubbleMap(data.resumen);

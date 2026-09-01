@@ -103,6 +103,15 @@ function jsonResponse(obj, status, cacheControl) {
 }
 
 export async function onRequestGet(context) {
+  // Cache en el borde de Cloudflare: sin importar cuántos miembros entren a la
+  // vez, Google Sheets solo se consulta una vez cada 15 min en total (no una
+  // vez por visita) -- esto es lo que evita repetir el problema de cuota que
+  // tumbó el sitio en Netlify. Cache-Control de la respuesta define el TTL.
+  const cache = caches.default;
+  const cacheKey = new Request(context.request.url, context.request);
+  const cached = await cache.match(cacheKey);
+  if (cached) return cached;
+
   const SHEET_ID = context.env.SHEET_ID;
   const API_KEY = context.env.SHEETS_API_KEY;
 
@@ -158,8 +167,12 @@ export async function onRequestGet(context) {
 
     const resumen = parseResumen(resumenRaw);
 
-    return jsonResponse({ fecha, fuerzaRelativa, posicion, resumen }, 200, 'public, max-age=900');
+    const response = jsonResponse({ fecha, fuerzaRelativa, posicion, resumen }, 200, 'public, max-age=900');
+    context.waitUntil(cache.put(cacheKey, response.clone()));
+    return response;
   } catch (err) {
+    // Los errores (ej. cuota de Google agotada) no se cachean, para reintentar
+    // en la próxima visita en vez de quedar pegado mostrando el error 15 min.
     return jsonResponse({ error: String(err.message || err) }, 502);
   }
 }
