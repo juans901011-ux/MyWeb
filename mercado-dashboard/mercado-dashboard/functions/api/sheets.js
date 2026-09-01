@@ -102,13 +102,19 @@ function jsonResponse(obj, status, cacheControl) {
   return new Response(JSON.stringify(obj), { status, headers });
 }
 
+// Subir este número fuerza un cache miss inmediato en el próximo deploy (útil
+// para invalidar una respuesta vieja sin esperar los 15 min de TTL, ej. justo
+// después de corregir un error de fórmula en el Sheet).
+const CACHE_VERSION = 2;
+
 export async function onRequestGet(context) {
   // Cache en el borde de Cloudflare: sin importar cuántos miembros entren a la
   // vez, Google Sheets solo se consulta una vez cada 15 min en total (no una
   // vez por visita) -- esto es lo que evita repetir el problema de cuota que
   // tumbó el sitio en Netlify. Cache-Control de la respuesta define el TTL.
+  // La clave es sintética (no la URL real) para poder invalidarla con CACHE_VERSION.
   const cache = caches.default;
-  const cacheKey = new Request(context.request.url, context.request);
+  const cacheKey = new Request(`https://cache-key.internal/api-sheets-v${CACHE_VERSION}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cached;
 
