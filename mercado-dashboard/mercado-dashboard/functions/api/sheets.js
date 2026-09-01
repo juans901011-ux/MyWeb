@@ -1,15 +1,13 @@
-// netlify/functions/sheets.js
-// Proxy a Google Sheets API v4. La API key vive SOLO aquí (variable de entorno),
-// nunca llega al navegador.
+// functions/api/sheets.js
+// Cloudflare Pages Function: proxy a Google Sheets API v4. La API key vive SOLO
+// en variables de entorno del proyecto (Cloudflare dashboard, o .dev.vars en
+// local), nunca llega al navegador.
 //
-// Variables de entorno requeridas (Netlify > Site settings > Environment, o .env con netlify dev):
+// Variables de entorno requeridas:
 //   SHEET_ID         -> el ID del Google Sheet (lo que va entre /d/ y /edit en la URL)
 //   SHEETS_API_KEY   -> API key de Google Cloud con "Google Sheets API" habilitada
 //
 // La hoja debe ser de lectura pública ("Cualquiera con el enlace: Lector").
-
-const SHEET_ID = process.env.SHEET_ID;
-const API_KEY = process.env.SHEETS_API_KEY;
 
 // ---- helpers de parseo ----
 const toNum = (s) => {
@@ -23,9 +21,9 @@ const ppsToNum = (s) => {
   return m ? parseFloat(m[0]) : 0;
 };
 
-async function getRanges(ranges) {
+async function getRanges(sheetId, apiKey, ranges) {
   const params = ranges.map(r => 'ranges=' + encodeURIComponent(r)).join('&');
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values:batchGet?${params}&key=${API_KEY}`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchGet?${params}&key=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Sheets API ${res.status}: ${await res.text()}`);
   const data = await res.json();
@@ -98,12 +96,21 @@ function parseResumen(sheet) {
   return rows;
 }
 
-exports.handler = async () => {
+function jsonResponse(obj, status, cacheControl) {
+  const headers = { 'Content-Type': 'application/json' };
+  if (cacheControl) headers['Cache-Control'] = cacheControl;
+  return new Response(JSON.stringify(obj), { status, headers });
+}
+
+export async function onRequestGet(context) {
+  const SHEET_ID = context.env.SHEET_ID;
+  const API_KEY = context.env.SHEETS_API_KEY;
+
   if (!SHEET_ID || !API_KEY) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Falta SHEET_ID o SHEETS_API_KEY en variables de entorno.' }) };
+    return jsonResponse({ error: 'Falta SHEET_ID o SHEETS_API_KEY en variables de entorno.' }, 500);
   }
   try {
-    const [rs, bd, dateRows, resumenRaw] = await getRanges([
+    const [rs, bd, dateRows, resumenRaw] = await getRanges(SHEET_ID, API_KEY, [
       "'%RS'!A1:R260",   // ambos paneles
       "BD!1:60",         // cierres históricos para sparklines (filas completas: no depende
                          // de un límite de columna fijo, así crece solo al agregar ETFs)
@@ -151,12 +158,8 @@ exports.handler = async () => {
 
     const resumen = parseResumen(resumenRaw);
 
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=900' },
-      body: JSON.stringify({ fecha, fuerzaRelativa, posicion, resumen })
-    };
+    return jsonResponse({ fecha, fuerzaRelativa, posicion, resumen }, 200, 'public, max-age=900');
   } catch (err) {
-    return { statusCode: 502, body: JSON.stringify({ error: String(err.message || err) }) };
+    return jsonResponse({ error: String(err.message || err) }, 502);
   }
-};
+}

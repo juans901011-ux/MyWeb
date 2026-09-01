@@ -208,14 +208,14 @@
    1) FUENTE DE DATOS
    Por ahora usamos DATOS DE MUESTRA (abajo) para que confirmes el aspecto.
    Para conectar Google Sheets en vivo, reemplaza loadData() por un fetch()
-   a tu Netlify Function (ver netlify/functions/sheets.js y README).
+   a tu Cloudflare Pages Function (ver functions/api/sheets.js y README).
    ========================================================================= */
 
 async function loadData(){
-  // Intenta datos en vivo desde la Netlify Function; si no hay backend
+  // Intenta datos en vivo desde la Pages Function; si no hay backend
   // (p.ej. abriendo el HTML directo), usa los datos de muestra.
   try{
-    const res = await fetch('/.netlify/functions/sheets');
+    const res = await fetch('/api/sheets');
     if(res.ok){
       const data = await res.json();
       if(data && Array.isArray(data.fuerzaRelativa) && data.fuerzaRelativa.length){
