@@ -1,5 +1,5 @@
 /**
- * Alerta diaria por correo: Top ETFs con RS_STS% > 90%, ordenados por variación del Día.
+ * Alerta diaria por correo: Top 10 ETFs por variación del Día (de mayor a menor).
  * Se pega en el editor de Apps Script del propio Google Sheet (Extensiones > Apps Script) —
  * corre sobre los mismos datos de la pestaña "Resumen" que usa el dashboard, sin backend
  * ni credenciales adicionales.
@@ -15,10 +15,9 @@
  *      La primera vez pedirá autorizar acceso a Gmail y al Sheet -> Revisar permisos ->
  *      elige tu cuenta -> Avanzado -> Ir a [nombre del proyecto] (no seguro) -> Permitir.
  *      Esto es normal: es tu propio script, no de un tercero.
- *   6. Listo. Se enviará solo, todos los días ~10:00-10:15am hora de Nueva York
- *      (Apps Script no garantiza el minuto exacto, solo una ventana aproximada).
- *      Se dejó a esta hora (en vez de más cerca de la apertura, 9:35) a propósito:
- *      le da más margen a GOOGLEFINANCE para terminar de recalcular la Var. Día.
+ *   6. Listo. Se enviará solo, de lunes a viernes ~9:45-10:00am hora de Nueva York
+ *      (Apps Script no garantiza el minuto exacto, solo una ventana aproximada de
+ *      hasta 15 min). Sábado y domingo no hay envío (mercado cerrado, sin datos nuevos).
  *
  * Para probarlo ya, sin esperar al día siguiente: elige "enviarAlertaTopSectores"
  * en el desplegable de funciones y dale a Ejecutar.
@@ -27,7 +26,6 @@
 const EMAIL_TO = 'juans901011@gmail.com';
 const SHEET_ID = '11gXWPBsWHIVnYa3vl_UHwEIcprH9WCcTbAVuN5V_G6E';
 const HOJA = 'Resumen';
-const RS_MIN = 90;
 const TOP_N = 10;
 
 // Convierte a número, aceptando dos formas que Apps Script puede devolver para
@@ -87,7 +85,7 @@ function leerResumen_() {
 function topSectores_() {
   const rows = leerResumen_();
   return rows
-    .filter(r => r.rs != null && r.rs > RS_MIN && r.dia != null)
+    .filter(r => r.dia != null)
     .sort((a, b) => b.dia - a.dia)
     .slice(0, TOP_N);
 }
@@ -106,7 +104,7 @@ function construirHtml_(top) {
   return `
     <div style="font-family:Arial,sans-serif;max-width:640px">
       <h2 style="background:#16285f;color:#fff;padding:8px 12px;margin:0">Top ${top.length} sectores fuertes — ${fecha}</h2>
-      <p style="color:#555;font-size:12px;margin:6px 0">RS_STS% &gt; ${RS_MIN}%, ordenados por variación del día (de mayor a menor).</p>
+      <p style="color:#555;font-size:12px;margin:6px 0">Ordenados por variación del día (de mayor a menor).</p>
       <table style="border-collapse:collapse;width:100%;font-size:13px">
         <thead>
           <tr style="background:#e9ecef">
@@ -126,8 +124,8 @@ function enviarAlertaTopSectores() {
   const top = topSectores_();
   if (!top.length) {
     MailApp.sendEmail(EMAIL_TO,
-      'Top sectores — sin datos que cumplan RS>' + RS_MIN + '%',
-      'Hoy ningún sector/ETF superó RS_STS% > ' + RS_MIN + '%.');
+      'Top sectores — sin datos disponibles',
+      'Hoy no se pudo leer la variación del día para ningún sector/ETF (revisa si el Sheet tiene errores de fórmula).');
     return;
   }
   MailApp.sendEmail({
@@ -137,19 +135,28 @@ function enviarAlertaTopSectores() {
   });
 }
 
-// Ejecutar UNA vez manualmente para instalar el disparador diario.
-// Si se corre de nuevo (ej. para cambiar la hora), borra el trigger anterior primero.
+// Ejecutar UNA vez manualmente para instalar los disparadores (lunes a viernes).
+// Si se corre de nuevo (ej. para cambiar la hora), borra los triggers anteriores primero.
 function instalarTrigger() {
   ScriptApp.getProjectTriggers()
     .filter(t => t.getHandlerFunction() === 'enviarAlertaTopSectores')
     .forEach(t => ScriptApp.deleteTrigger(t));
 
-  // 10:00am NY a propósito (no más cerca de la apertura, 9:35): le da margen a
-  // GOOGLEFINANCE para terminar de recalcular la Var. Día antes de leerla.
-  ScriptApp.newTrigger('enviarAlertaTopSectores')
-    .timeBased()
-    .atHour(10)
-    .nearMinute(0)
-    .everyDays(1)
-    .create();
+  // Un trigger por día hábil: onWeekDay() no admite un rango lunes-viernes en una
+  // sola llamada, así que se crean 5 triggers idénticos salvo el día.
+  const diasHabiles = [
+    ScriptApp.WeekDay.MONDAY,
+    ScriptApp.WeekDay.TUESDAY,
+    ScriptApp.WeekDay.WEDNESDAY,
+    ScriptApp.WeekDay.THURSDAY,
+    ScriptApp.WeekDay.FRIDAY
+  ];
+  diasHabiles.forEach(dia => {
+    ScriptApp.newTrigger('enviarAlertaTopSectores')
+      .timeBased()
+      .onWeekDay(dia)
+      .atHour(9)
+      .nearMinute(45)
+      .create();
+  });
 }
