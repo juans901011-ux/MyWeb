@@ -122,6 +122,12 @@
     white-space:nowrap;
   }
   .bubble-tip b{color:#fff}
+  .bubble-tip-comps{margin-top:6px; border-collapse:collapse; width:100%}
+  .bubble-tip-comps th{color:#aaa; font-weight:400; text-align:right; padding:1px 0 2px 10px}
+  .bubble-tip-comps th:first-child, .bubble-tip-comps td:first-child{text-align:left; padding-left:0}
+  .bubble-tip-comps td{text-align:right; padding:1px 0 1px 10px}
+  .bubble-tip-comps td.up{color:#4ade80}
+  .bubble-tip-comps td.down{color:#f87171}
 
   @media (max-width:820px){ .grid2{grid-template-columns:1fr} .top{flex-direction:column} .logo{text-align:left} }
 </style>
@@ -408,7 +414,7 @@ function niceStep(maxAbs){
   return (norm < 1.5 ? 1 : norm < 3 ? 2 : norm < 7 ? 5 : 10) * pow;
 }
 
-function renderBubbleMap(rows){
+function renderBubbleMap(rows, componentes){
   const svg = document.getElementById('bubble-svg');
   const wrap = document.getElementById('bubble-wrap');
   const tip = document.getElementById('bubble-tip');
@@ -471,9 +477,16 @@ function renderBubbleMap(rows){
     const cx = xs(r.dia), cy = ys(r.rs);
     const dot = el('circle', {cx, cy, r:7, fill: colorRS(r.rs), class:'bb-dot'});
     svg.appendChild(dot);
+    const comps = (componentes && componentes[r.ticker]) || [];
     const show = ()=>{
       const dr = dot.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
-      tip.innerHTML = `<b>${r.ticker}</b> — ${r.nombre}<br>RS_STS%: <b>${r.rs}%</b> &nbsp; Día: <b>${fmtPct(r.dia)}</b>`;
+      let html = `<b>${r.ticker}</b> — ${r.nombre}<br>RS_STS%: <b>${r.rs}%</b> &nbsp; Día: <b>${fmtPct(r.dia)}</b>`;
+      if(comps.length){
+        html += '<table class="bubble-tip-comps"><thead><tr><th>Componente</th><th>Peso</th><th>Día</th></tr></thead><tbody>' +
+          comps.map(c => `<tr><td>${c.ticker}</td><td>${c.peso.toFixed(2)}%</td><td class="${c.change>=0?'up':'down'}">${c.change!=null?fmtPct(c.change):'—'}</td></tr>`).join('') +
+          '</tbody></table>';
+      }
+      tip.innerHTML = html;
       tip.style.display = 'block';
       tip.style.left = (dr.left - wr.left + dr.width/2 + 10) + 'px';
       tip.style.top = (dr.top - wr.top - 10) + 'px';
@@ -527,7 +540,7 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
   }
   if(Array.isArray(data.resumen) && data.resumen.length){
     renderResumen(data.resumen);
-    renderBubbleMap(data.resumen);
+    renderBubbleMap(data.resumen, data.componentes || {});
   } else {
     document.getElementById('tab-resumen').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';
     document.getElementById('tab-mapa').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';

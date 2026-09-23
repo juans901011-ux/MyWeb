@@ -96,6 +96,41 @@ function parseResumen(sheet) {
   return rows;
 }
 
+// ---- construir top 10 de componentes por ETF desde la hoja "BD Tickers" ----
+// Formato de la hoja: filas largas [ETF, Ticker, % Change, Peso], agrupadas
+// por ETF pero no necesariamente ordenadas -- se ordena aquí por Peso desc.
+function parseComponentes(rows) {
+  if (!rows || !rows.length) return {};
+
+  const headerIdx = rows.findIndex(row => row && row.some(c => String(c || '').trim() === 'ETF'));
+  if (headerIdx === -1) return {};
+  const header = rows[headerIdx];
+  const col = {};
+  header.forEach((cell, i) => {
+    const t = String(cell || '').trim();
+    if (t) col[t] = i;
+  });
+
+  const byEtf = {};
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const etf = row && col['ETF'] != null ? (row[col['ETF']] || '').trim() : '';
+    const ticker = row && col['Ticker'] != null ? (row[col['Ticker']] || '').trim() : '';
+    const peso = row && col['Peso'] != null ? toNum(row[col['Peso']]) : null;
+    if (!etf || !ticker || peso == null) continue;
+    if (!byEtf[etf]) byEtf[etf] = [];
+    byEtf[etf].push({
+      ticker,
+      peso,
+      change: col['% Change'] != null ? toNum(row[col['% Change']]) : null
+    });
+  }
+  for (const etf of Object.keys(byEtf)) {
+    byEtf[etf] = byEtf[etf].sort((a, b) => b.peso - a.peso).slice(0, 10);
+  }
+  return byEtf;
+}
+
 function jsonResponse(obj, status, cacheControl) {
   const headers = { 'Content-Type': 'application/json' };
   if (cacheControl) headers['Cache-Control'] = cacheControl;
@@ -105,7 +140,7 @@ function jsonResponse(obj, status, cacheControl) {
 // Subir este número fuerza un cache miss inmediato en el próximo deploy (útil
 // para invalidar una respuesta vieja sin esperar los 15 min de TTL, ej. justo
 // después de corregir un error de fórmula en el Sheet).
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 4;
 
 export async function onRequestGet(context) {
   // Cache en el borde de Cloudflare: sin importar cuántos miembros entren a la
@@ -116,7 +151,12 @@ export async function onRequestGet(context) {
   const cache = caches.default;
   const cacheKey = new Request(`https://cache-key.internal/api-sheets-v${CACHE_VERSION}`);
   const cached = await cache.match(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    // Al cliente/CDN nunca se le manda Cache-Control público (ver más abajo por qué);
+    // el hit de NUESTRO caché interno es lo único que decide si se sirve sin llamar
+    // a Google Sheets, así que aquí solo reenviamos el cuerpo ya guardado.
+    return new Response(cached.body, { status: cached.status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
+  }
 
   const SHEET_ID = context.env.SHEET_ID;
   const API_KEY = context.env.SHEETS_API_KEY;
@@ -125,12 +165,14 @@ export async function onRequestGet(context) {
     return jsonResponse({ error: 'Falta SHEET_ID o SHEETS_API_KEY en variables de entorno.' }, 500);
   }
   try {
-    const [rs, bd, dateRows, resumenRaw] = await getRanges(SHEET_ID, API_KEY, [
+    const [rs, bd, dateRows, resumenRaw, componentesRaw] = await getRanges(SHEET_ID, API_KEY, [
       "'%RS'!A1:R260",   // ambos paneles
       "BD!1:60",         // cierres históricos para sparklines (filas completas: no depende
                          // de un límite de columna fijo, así crece solo al agregar ETFs)
       "'%RS'!D1:D6",     // fecha (celda exacta puede variar si se insertan filas arriba)
-      "Resumen!A1:S150"  // tabla resumen ordenable
+      "Resumen!A1:S150", // tabla resumen ordenable
+      "'BD Tickers'!A:D" // componentes de cada ETF (top 10 por Peso en el mapa de burbujas);
+                         // columnas completas porque aún se está llenando ETF por ETF
     ]);
 
     // La celda de fecha se identifica por contener un año (4 dígitos), no por
@@ -172,10 +214,16 @@ export async function onRequestGet(context) {
     }
 
     const resumen = parseResumen(resumenRaw);
+    const componentes = parseComponentes(componentesRaw);
 
-    const response = jsonResponse({ fecha, fuerzaRelativa, posicion, resumen }, 200, 'public, max-age=900');
-    context.waitUntil(cache.put(cacheKey, response.clone()));
-    return response;
+    // Guardamos en nuestro caché interno CON Cache-Control público (la Cache API de
+    // Workers exige eso para persistir la entrada), pero la respuesta que sale hacia
+    // el cliente/CDN lleva no-store -- así Cloudflare nunca cachea por la URL real
+    // (eso fue lo que dejaba la página pegada en datos viejos incluso subiendo
+    // CACHE_VERSION: ese caché de borde no se invalida con nuestra clave sintética).
+    const payload = { fecha, fuerzaRelativa, posicion, resumen, componentes };
+    context.waitUntil(cache.put(cacheKey, jsonResponse(payload, 200, 'public, max-age=900')));
+    return jsonResponse(payload, 200, 'no-store');
   } catch (err) {
     // Los errores (ej. cuota de Google agotada) no se cachean, para reintentar
     // en la próxima visita en vez de quedar pegado mostrando el error 15 min.
