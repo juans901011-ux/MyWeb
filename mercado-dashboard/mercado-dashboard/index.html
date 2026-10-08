@@ -102,6 +102,19 @@
   .resumen td.nombre{font-weight:600; color:var(--desc); text-align:left; text-overflow:ellipsis}
   .resumen td.idx{color:#888; font-weight:400; text-align:center}
 
+  /* ---- RS Países: mismas reglas de .resumen pero con sus propios anchos de
+     columna -- "Nivel"/"Moneda"/los precios necesitan mucho menos espacio que
+     encabezados largos como "% vs 52W High", que se cortaban con el 8.9% parejo. */
+  #paises-table th:nth-child(1), #paises-table td:nth-child(1){width:3%}
+  #paises-table th:nth-child(2), #paises-table td:nth-child(2){width:7%}
+  #paises-table th:nth-child(3), #paises-table td:nth-child(3){width:17%}
+  #paises-table th:nth-child(4), #paises-table td:nth-child(4){width:5%}
+  #paises-table th:nth-child(5), #paises-table td:nth-child(5){width:6%}
+  #paises-table th:nth-child(6), #paises-table td:nth-child(6){width:7%}
+  #paises-table th:nth-child(7), #paises-table td:nth-child(7){width:7%}
+  #paises-table th:nth-child(8), #paises-table td:nth-child(8){width:7%}
+  #paises-table th:nth-child(n+9), #paises-table td:nth-child(n+9){width:10.25%}
+
   /* ---- Mapa RS x Día (burbujas) ---- */
   .map-caption{font-size:11px; color:#666; margin-bottom:8px}
   .bubble-wrap{position:relative; width:100%}
