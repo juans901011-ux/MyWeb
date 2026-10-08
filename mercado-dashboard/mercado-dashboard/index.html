@@ -147,6 +147,7 @@
     <button class="tab-btn active" data-tab="sectores">% RS por sectores</button>
     <button class="tab-btn" data-tab="resumen">Resumen</button>
     <button class="tab-btn" data-tab="mapa">Mapa RS × Día</button>
+    <button class="tab-btn" data-tab="paises">RS Países</button>
   </div>
 
   <div class="tab-panel active" id="tab-sectores">
@@ -206,6 +207,16 @@
       <svg id="bubble-svg"></svg>
       <div class="bubble-tip" id="bubble-tip"></div>
     </div>
+  </div>
+
+  <!-- ============ RS POR PAÍSES (ordenable) ============ -->
+  <div class="tab-panel" id="tab-paises">
+    <table class="resumen" id="paises-table">
+      <thead>
+        <tr id="paises-head"></tr>
+      </thead>
+      <tbody id="paises-body"></tbody>
+    </table>
   </div>
 </div>
 
@@ -406,6 +417,86 @@ function renderResumen(rows){
   });
 }
 
+// ---- RS por países: tabla ordenable (mismo patrón que Resumen) ----
+const PAISES_COLS = [
+  {key:'ticker',  label:'Ticker',          type:'text'},
+  {key:'etf',     label:'ETF',             type:'text'},
+  {key:'nivel',   label:'Nivel',           type:'text'},
+  {key:'moneda',  label:'Moneda',          type:'text'},
+  {key:'last',    label:'Último',          type:'num'},
+  {key:'w52h',    label:'52W High',        type:'num'},
+  {key:'w52l',    label:'52W Low',         type:'num'},
+  {key:'vsW52h',  label:'% vs 52W High',   type:'pct'},
+  {key:'toW52h',  label:'% to 52W High',   type:'pct'},
+  {key:'toW52l',  label:'% to 52W Low',    type:'pct'},
+  {key:'dia',     label:'1D Chg%',         type:'pct'}
+];
+
+let paisesRows = [];
+let paisesSort = {key:'vsW52h', dir:1};   // asc: más cerca de 0 (menos negativo) = más fuerte primero
+
+function fmtNum(v){ return v==null ? '' : v.toFixed(2); }
+
+function renderPaisesHead(){
+  const tr = document.getElementById('paises-head');
+  tr.innerHTML = '<th style="width:34px">#</th>' + PAISES_COLS.map(c=>{
+    const active = paisesSort.key === c.key;
+    const arrow = active ? (paisesSort.dir === 1 ? '▲' : '▼') : '';
+    return `<th data-key="${c.key}">${c.label}${arrow ? ` <span class="arrow">${arrow}</span>` : ''}</th>`;
+  }).join('');
+  tr.querySelectorAll('th[data-key]').forEach(th=>{
+    th.addEventListener('click', ()=>{
+      const key = th.dataset.key;
+      paisesSort.dir = (paisesSort.key === key) ? -paisesSort.dir : 1;
+      paisesSort.key = key;
+      renderPaises(paisesRows);
+    });
+  });
+}
+
+function renderPaises(rows){
+  paisesRows = rows;
+  renderPaisesHead();
+
+  const col = PAISES_COLS.find(c=>c.key===paisesSort.key);
+  const sorted = [...rows].sort((a,b)=>{
+    let av = a[paisesSort.key], bv = b[paisesSort.key];
+    let cmp;
+    if(col.type === 'text'){
+      cmp = String(av||'').localeCompare(String(bv||''), 'es');
+    } else {
+      av = av==null ? -Infinity : av; bv = bv==null ? -Infinity : bv;
+      cmp = av - bv;
+    }
+    return cmp * paisesSort.dir;
+  });
+
+  const caps = {};
+  PAISES_COLS.filter(c=>c.type==='pct').forEach(c=>{
+    caps[c.key] = Math.max(1, ...rows.map(r=> Math.abs(r[c.key]||0)));
+  });
+
+  const body = document.getElementById('paises-body');
+  body.innerHTML = '';
+  sorted.forEach((r,i)=>{
+    const tr = document.createElement('tr');
+    let cells = `<td class="idx">${i+1}</td>`;
+    cells += `<td class="ticker">${r.ticker}</td>`;
+    cells += `<td class="nombre" title="${r.etf}">${r.etf}</td>`;
+    cells += `<td class="num">${r.nivel||''}</td>`;
+    cells += `<td class="num">${r.moneda||''}</td>`;
+    ['last','w52h','w52l'].forEach(key=>{
+      cells += `<td class="num">${fmtNum(r[key])}</td>`;
+    });
+    ['vsW52h','toW52h','toW52l','dia'].forEach(key=>{
+      const v = r[key];
+      cells += `<td class="num" style="background:${colorPctRel(v, caps[key])}">${fmtPct(v)}</td>`;
+    });
+    tr.innerHTML = cells;
+    body.appendChild(tr);
+  });
+}
+
 // ---- Mapa RS x Día: burbujas (SVG, sin librerías) ----
 function niceStep(maxAbs){
   const raw = maxAbs / 4;
@@ -544,6 +635,11 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
   } else {
     document.getElementById('tab-resumen').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';
     document.getElementById('tab-mapa').innerHTML = '<div class="muted">Sin datos de Resumen.</div>';
+  }
+  if(Array.isArray(data.paises) && data.paises.length){
+    renderPaises(data.paises);
+  } else {
+    document.getElementById('tab-paises').innerHTML = '<div class="muted">Sin datos de RS por países.</div>';
   }
 })();
 

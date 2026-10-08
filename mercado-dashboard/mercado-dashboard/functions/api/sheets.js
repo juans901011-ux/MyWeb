@@ -96,6 +96,45 @@ function parseResumen(sheet) {
   return rows;
 }
 
+// ---- construir filas de la pestaña "xPaíses" (RS por países) ----
+function parsePaises(sheet) {
+  if (!sheet || !sheet.length) return [];
+
+  // Mismo criterio que parseResumen: encabezado ubicado por contenido ("Ticker").
+  const headerIdx = sheet.findIndex(row => row && row.some(c => String(c || '').trim() === 'Ticker'));
+  if (headerIdx === -1) return [];
+  const header = sheet[headerIdx];
+  const col = {};
+  header.forEach((cell, i) => {
+    const t = String(cell || '').trim();
+    if (t) col[t] = i;
+  });
+
+  const numCols = {
+    w52h: '52W High', w52l: '52W Low', last: 'Last',
+    vsW52h: '% vs 52W High', toW52h: '% to 52W High', toW52l: '% to 52W Low',
+    dia: '1D Chg%'
+  };
+
+  const rows = [];
+  for (let i = headerIdx + 1; i < sheet.length; i++) {
+    const row = sheet[i];
+    const ticker = row && col['Ticker'] != null ? (row[col['Ticker']] || '').trim() : '';
+    if (!ticker) continue;
+    const item = {
+      ticker,
+      etf: (col['ETF'] != null ? row[col['ETF']] : '') || '',
+      nivel: (col['Level'] != null ? row[col['Level']] : '') || '',
+      moneda: (col['Currency'] != null ? row[col['Currency']] : '') || ''
+    };
+    for (const [key, label] of Object.entries(numCols)) {
+      item[key] = col[label] != null ? toNum(row[col[label]]) : null;
+    }
+    rows.push(item);
+  }
+  return rows;
+}
+
 // ---- construir top 10 de componentes por ETF desde la hoja "BD Tickers" ----
 // Formato de la hoja: filas largas [ETF, Ticker, % Change, Peso], agrupadas
 // por ETF pero no necesariamente ordenadas -- se ordena aquí por Peso desc.
@@ -140,7 +179,7 @@ function jsonResponse(obj, status, cacheControl) {
 // Subir este número fuerza un cache miss inmediato en el próximo deploy (útil
 // para invalidar una respuesta vieja sin esperar los 15 min de TTL, ej. justo
 // después de corregir un error de fórmula en el Sheet).
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 6;
 
 export async function onRequestGet(context) {
   // Cache en el borde de Cloudflare: sin importar cuántos miembros entren a la
@@ -165,14 +204,18 @@ export async function onRequestGet(context) {
     return jsonResponse({ error: 'Falta SHEET_ID o SHEETS_API_KEY en variables de entorno.' }, 500);
   }
   try {
-    const [rs, bd, dateRows, resumenRaw, componentesRaw] = await getRanges(SHEET_ID, API_KEY, [
+    const [rs, bd, dateRows, resumenRaw, componentesRaw, paisesRaw] = await getRanges(SHEET_ID, API_KEY, [
       "'%RS'!A1:R260",   // ambos paneles
       "BD!1:60",         // cierres históricos para sparklines (filas completas: no depende
                          // de un límite de columna fijo, así crece solo al agregar ETFs)
       "'%RS'!D1:D6",     // fecha (celda exacta puede variar si se insertan filas arriba)
       "Resumen!A1:S150", // tabla resumen ordenable
-      "'BD Tickers'!A:D" // componentes de cada ETF (top 10 por Peso en el mapa de burbujas);
-                         // columnas completas porque aún se está llenando ETF por ETF
+      "'BD Tickers'!A:Z", // componentes de cada ETF (top 10 por Peso en el mapa de burbujas).
+                         // Antes era A:D -- se truncaba el límite de columna cuando agregaron
+                         // una columna "#" al inicio y corrió "Peso" a la columna E (quedaba
+                         // fuera del rango, componentes salía vacío). Mismo error de antes con
+                         // BD!A1:DZ60 -- por eso aquí también sin límite fijo de columna.
+      "xPaíses!A:Z"      // tabla ordenable de RS por países; columnas completas por la misma razón
     ]);
 
     // La celda de fecha se identifica por contener un año (4 dígitos), no por
@@ -215,13 +258,14 @@ export async function onRequestGet(context) {
 
     const resumen = parseResumen(resumenRaw);
     const componentes = parseComponentes(componentesRaw);
+    const paises = parsePaises(paisesRaw);
 
     // Guardamos en nuestro caché interno CON Cache-Control público (la Cache API de
     // Workers exige eso para persistir la entrada), pero la respuesta que sale hacia
     // el cliente/CDN lleva no-store -- así Cloudflare nunca cachea por la URL real
     // (eso fue lo que dejaba la página pegada en datos viejos incluso subiendo
     // CACHE_VERSION: ese caché de borde no se invalida con nuestra clave sintética).
-    const payload = { fecha, fuerzaRelativa, posicion, resumen, componentes };
+    const payload = { fecha, fuerzaRelativa, posicion, resumen, componentes, paises };
     context.waitUntil(cache.put(cacheKey, jsonResponse(payload, 200, 'public, max-age=900')));
     return jsonResponse(payload, 200, 'no-store');
   } catch (err) {
