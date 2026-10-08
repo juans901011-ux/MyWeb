@@ -503,7 +503,12 @@ function renderPaises(rows){
     });
     ['vsW52h','toW52h','toW52l','dia'].forEach(key=>{
       const v = r[key];
-      cells += `<td class="num" style="background:${colorPctRel(v, caps[key])}">${fmtPct(v)}</td>`;
+      // "% to 52W High" siempre es positivo (cuánto falta para llegar al máximo),
+      // así que un valor grande es MALO (le falta mucho) y uno chico es BUENO (está
+      // cerca de su máximo) -- al revés que las demás columnas, donde positivo=verde.
+      // Se invierte el signo solo para elegir el color, no para el número mostrado.
+      const colorVal = key === 'toW52h' ? -v : v;
+      cells += `<td class="num" style="background:${colorPctRel(colorVal, caps[key])}">${fmtPct(v)}</td>`;
     });
     tr.innerHTML = cells;
     body.appendChild(tr);
