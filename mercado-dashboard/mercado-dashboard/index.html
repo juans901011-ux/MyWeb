@@ -115,6 +115,13 @@
   #paises-table th:nth-child(8), #paises-table td:nth-child(8){width:7%}
   #paises-table th:nth-child(n+9), #paises-table td:nth-child(n+9){width:10.25%}
 
+  /* barra de datos dentro de la celda (estilo "Data Bars" de Excel): la barra
+     se posiciona absoluta e ignora el padding de la celda (llega hasta el borde),
+     el texto queda encima y respeta el padding normal. */
+  td.paisbar{position:relative}
+  td.paisbar .bar-fill{position:absolute; top:2px; bottom:2px; opacity:.55; border-radius:2px}
+  td.paisbar .bar-text{position:relative; z-index:1}
+
   /* ---- Mapa RS x Día (burbujas) ---- */
   .map-caption{font-size:11px; color:#666; margin-bottom:8px}
   .bubble-wrap{position:relative; width:100%}
@@ -450,6 +457,16 @@ let paisesSort = {key:'vsW52h', dir:1};   // asc: más cerca de 0 (menos negativ
 
 function fmtNum(v){ return v==null ? '' : v.toFixed(2); }
 
+// ---- barra de datos dentro de la celda (estilo "Data Bars" de Excel) ----
+const BAR_GREEN = 'hsl(130 50% 55%)';
+const BAR_RED = 'hsl(0 65% 58%)';
+function barCell(v, cap, growLeft, color){
+  if(v == null) return '';
+  const pct = Math.max(0, Math.min(100, (Math.abs(v)/(cap||1))*100));
+  const side = growLeft ? `right:0` : `left:0`;
+  return `<div class="bar-fill" style="${side}; width:${pct.toFixed(1)}%; background:${color}"></div><span class="bar-text">${fmtPct(v)}</span>`;
+}
+
 function renderPaisesHead(){
   const tr = document.getElementById('paises-head');
   tr.innerHTML = '<th style="width:34px">#</th>' + PAISES_COLS.map(c=>{
@@ -503,17 +520,19 @@ function renderPaises(rows){
     });
     ['vsW52h','toW52h','toW52l','dia'].forEach(key=>{
       const v = r[key];
-      let bg;
+      let color, growLeft;
       if(key === 'toW52h'){
         // "% to 52W High" siempre es positivo (cuánto falta para llegar al máximo):
         // chico = cerca de su máximo (bueno) y grande = lejos (malo). Escala roja-
-        // amarilla-verde completa (como RS_STS%), no solo "todo rojo más oscuro".
+        // amarilla-verde completa (como RS_STS%), no solo rojo/verde binario.
         const t = Math.max(0, Math.min(1, v / caps[key]));
-        bg = colorRS(100 - t*100);
+        color = colorRS(100 - t*100);
+        growLeft = false;
       } else {
-        bg = colorPctRel(v, caps[key]);
+        color = v >= 0 ? BAR_GREEN : BAR_RED;
+        growLeft = v < 0;   // negativos: barra anclada a la derecha, crece hacia la izquierda
       }
-      cells += `<td class="num" style="background:${bg}">${fmtPct(v)}</td>`;
+      cells += `<td class="num paisbar">${barCell(v, caps[key], growLeft, color)}</td>`;
     });
     tr.innerHTML = cells;
     body.appendChild(tr);
