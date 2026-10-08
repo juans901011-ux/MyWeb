@@ -441,15 +441,23 @@ function renderResumen(rows){
 const PAISES_COLS = [
   {key:'ticker',  label:'Ticker',          type:'text'},
   {key:'etf',     label:'ETF',             type:'text'},
-  {key:'nivel',   label:'Nivel',           type:'text'},
+  {key:'nivel',   label:'Nivel',           type:'text',
+    desc:'Nivel o categoría asignada a este país/mercado en la hoja de origen.'},
   {key:'moneda',  label:'Moneda',          type:'text'},
-  {key:'last',    label:'Último',          type:'num'},
-  {key:'w52h',    label:'52W High',        type:'num'},
-  {key:'w52l',    label:'52W Low',         type:'num'},
-  {key:'vsW52h',  label:'% vs 52W High',   type:'pct'},
-  {key:'toW52h',  label:'% to 52W High',   type:'pct'},
-  {key:'toW52l',  label:'% to 52W Low',    type:'pct'},
-  {key:'dia',     label:'1D Chg%',         type:'pct'}
+  {key:'last',    label:'Último',          type:'num',
+    desc:'Último precio de cierre del ETF.'},
+  {key:'w52h',    label:'52W High',        type:'num',
+    desc:'Precio más alto que alcanzó el ETF en las últimas 52 semanas.'},
+  {key:'w52l',    label:'52W Low',         type:'num',
+    desc:'Precio más bajo que alcanzó el ETF en las últimas 52 semanas.'},
+  {key:'vsW52h',  label:'% vs 52W High',   type:'pct',
+    desc:'Qué tan por debajo está el precio actual respecto a su máximo de 52 semanas. Más negativo = más lejos de su máximo.'},
+  {key:'toW52h',  label:'% to 52W High',   type:'pct',
+    desc:'Cuánto debe subir el precio actual (en %) para alcanzar su máximo de 52 semanas. Entre más bajo, más cerca está de su máximo.'},
+  {key:'toW52l',  label:'% to 52W Low',    type:'pct',
+    desc:'Cuánto ha subido el precio actual (en %) desde su mínimo de 52 semanas.'},
+  {key:'dia',     label:'1D Chg%',         type:'pct',
+    desc:'Variación porcentual del precio en la última sesión (1 día).'}
 ];
 
 let paisesRows = [];
@@ -472,7 +480,8 @@ function renderPaisesHead(){
   tr.innerHTML = '<th style="width:34px">#</th>' + PAISES_COLS.map(c=>{
     const active = paisesSort.key === c.key;
     const arrow = active ? (paisesSort.dir === 1 ? '▲' : '▼') : '';
-    return `<th data-key="${c.key}">${c.label}${arrow ? ` <span class="arrow">${arrow}</span>` : ''}</th>`;
+    const title = c.desc ? ` title="${c.desc}"` : '';
+    return `<th data-key="${c.key}"${title}>${c.label}${arrow ? ` <span class="arrow">${arrow}</span>` : ''}</th>`;
   }).join('');
   tr.querySelectorAll('th[data-key]').forEach(th=>{
     th.addEventListener('click', ()=>{
